@@ -224,21 +224,36 @@ def scan(
     result = ScanResult(root=root)
     seen = 0
 
-    walker = root.rglob("*") if recursive else root.iterdir()
+    def _safe_walk():
+        if not recursive:
+            try:
+                for entry in os.scandir(root):
+                    if entry.is_file(follow_symlinks=False):
+                        p = Path(entry.path)
+                        if skip_hidden and p.name.startswith("."):
+                            continue
+                        yield p
+            except OSError:
+                pass
+            return
+            
+        skip_dirs = {"$recycle.bin", "system volume information", "windows", "appdata"}
+        # Use os.walk which handles missing/permission-denied folders more gracefully
+        for dirpath, dirnames, filenames in os.walk(root):
+            # Modify dirnames in-place to prune skipped directories from traversal
+            dirnames[:] = [
+                d for d in dirnames 
+                if not (skip_hidden and d.startswith(".")) and d.lower() not in skip_dirs
+            ]
+            
+            for f in filenames:
+                if skip_hidden and f.startswith("."):
+                    continue
+                yield Path(dirpath) / f
 
-    for p in walker:
+    for p in _safe_walk():
         if seen >= max_files:
             break
-        if not p.is_file():
-            continue
-        if skip_hidden and (p.name.startswith(".") or any(
-            part.startswith(".") for part in p.parts
-        )):
-            continue
-        # skip system dirs on Windows
-        skip_dirs = {"$recycle.bin", "system volume information", "windows", "appdata"}
-        if any(part.lower() in skip_dirs for part in p.parts):
-            continue
 
         try:
             stat = p.stat()
