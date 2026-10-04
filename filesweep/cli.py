@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import time
+import shutil
 from pathlib import Path
 
 # Force UTF-8 output on Windows if possible
@@ -209,13 +210,29 @@ def cmd_dupes(args):
         wasted = sum(sum(f.size_bytes for f in g[1:]) for g in result.duplicates)
         print(f"  {red(str(len(result.duplicates)) + ' duplicate groups')} -- "
               f"{yellow(sc._human_size(wasted))} wasted space\n")
+        
+        to_delete = []
         for i, grp in enumerate(result.duplicates, 1):
             size = sc._human_size(grp[0].size_bytes)
             print(bold(f"  Group {i}  ({size} each -- {len(grp)} copies)"))
             for j, fi in enumerate(grp):
                 marker = green("  OK KEEP") if j == 0 else red("  !! DUPE")
                 print(f"  {marker}  {fi.path}  {dim(fi.age)}")
+                if j > 0:
+                    to_delete.append(fi.path)
             print()
+            
+        if args.delete and to_delete:
+            ans = input(bold(f"  Delete {len(to_delete)} duplicate files to save {sc._human_size(wasted)}? [y/N]: ")).strip().lower()
+            if ans == 'y':
+                deleted = 0
+                for p in to_delete:
+                    try:
+                        os.remove(p)
+                        deleted += 1
+                    except Exception as e:
+                        print(red(f"  Failed to delete {p}: {e}"))
+                print(green(f"  Successfully deleted {deleted} files!"))
 
     print(dim(f"  Completed in {elapsed:.2f}s"))
     print()
@@ -283,6 +300,46 @@ def cmd_top(args):
     print()
 
 
+def cmd_organize(args):
+    """Move files into category-based folders."""
+    root = _resolve_path(args.path)
+    if not root.exists():
+        print(red(f"Error: Path does not exist: {root}"))
+        sys.exit(1)
+
+    _print_header(f"Organizing  --  {root}")
+    print(dim(f"  Scanning {'recursively' if not args.shallow else 'top-level only'}..."))
+
+    result = sc.scan(root, recursive=not args.shallow, find_dupes=False)
+    
+    if not result.files:
+        print(green("  No files to organize!"))
+        return
+
+    moved = 0
+    for cat, files in result.by_category.items():
+        if not files:
+            continue
+        cat_dir = root / cat
+        cat_dir.mkdir(exist_ok=True)
+        for f in files:
+            try:
+                dest = cat_dir / f.path.name
+                if dest.exists() and dest != f.path:
+                    # Append timestamp to avoid overwrite
+                    base = f.path.stem
+                    ext = f.path.suffix
+                    dest = cat_dir / f"{base}_{int(time.time())}{ext}"
+                if dest != f.path:
+                    shutil.move(str(f.path), str(dest))
+                    moved += 1
+            except Exception as e:
+                print(red(f"  Failed to move {f.path.name}: {e}"))
+
+    print(green(f"\n  Successfully organized {moved} files into category folders!"))
+    print()
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
@@ -295,8 +352,10 @@ def main():
             "  filesweep scan C:\\Users\\amitg\\Docs   # scan a specific folder\n"
             "  filesweep scan --detail --category Images\n"
             "  filesweep dupes C:\\Users\\amitg       # find duplicate files\n"
+            "  filesweep dupes --delete             # find and delete duplicates\n"
             "  filesweep open report                # find & open a file by name\n"
             "  filesweep top                        # show 20 largest files\n"
+            "  filesweep organize                   # move files into category folders\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -325,6 +384,7 @@ def main():
                          help="Folder to scan (default: home)")
     p_dupes.add_argument("--shallow", action="store_true",
                          help="Only scan top-level")
+    p_dupes.add_argument("--delete", action="store_true", help="Interactively prompt to delete duplicates")
 
     # ── open ──────────────────────────────────────────────────────────────────
     p_open = sub.add_parser("open", help="Find and open a file by name")
@@ -338,6 +398,11 @@ def main():
     p_top.add_argument("--n", type=int, default=20, help="How many to show (default: 20)")
     p_top.add_argument("--shallow", action="store_true")
 
+    # ── organize ──────────────────────────────────────────────────────────────
+    p_org = sub.add_parser("organize", help="Move files into category folders (e.g. Images, Documents)")
+    p_org.add_argument("path", nargs="?", default=None, help="Folder to organize (default: home)")
+    p_org.add_argument("--shallow", action="store_true", help="Only organize top-level files")
+
     args = parser.parse_args()
 
     if args.command == "scan":
@@ -348,6 +413,8 @@ def main():
         cmd_open(args)
     elif args.command == "top":
         cmd_top(args)
+    elif args.command == "organize":
+        cmd_organize(args)
     else:
         parser.print_help()
 

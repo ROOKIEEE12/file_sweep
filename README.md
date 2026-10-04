@@ -11,6 +11,7 @@
 - ⚠️ **Vague Name Detection** — Flags files with meaningless names like `document1.pdf`, `untitled.png`, or hex-named files
 - 📊 **Summary Table** — Shows a quick breakdown of file counts and sizes per category with a visual bar
 - 🏆 **Top Largest Files** — Instantly find the biggest space hogs in any folder
+- 🗂️ **Auto-Organization** — Neatly moves all your cluttered files into category-based folders in seconds
 - 🔎 **File Finder & Opener** — Search for any file by name and open it with one command
 - 🎨 **Color-coded Output** — Rich ANSI-colored terminal output (auto-disabled when not supported)
 - ⚡ **Fast** — Handles up to 50,000 files per scan, skips system/hidden directories automatically
@@ -94,6 +95,9 @@ filesweep dupes
 # Find duplicates in a specific folder
 filesweep dupes C:\Users\amitg\Downloads
 
+# Interactively prompt to delete duplicate files to save space
+filesweep dupes --delete
+
 # Shallow scan (top-level only)
 filesweep dupes --shallow
 ```
@@ -135,6 +139,23 @@ filesweep top C:\Users\amitg\Downloads --n 10
 # Shallow scan
 filesweep top --shallow
 ```
+
+---
+
+### `organize` — Automatically group files into category folders
+
+```bash
+# Organize files in your home directory
+filesweep organize
+
+# Organize a messy Downloads folder
+filesweep organize C:\Users\amitg\Downloads
+
+# Only organize top-level files, ignore subfolders
+filesweep organize --shallow
+```
+
+This will automatically create folders like `Images/`, `Documents/`, `Archives/`, etc., and safely move files into them. If a file with the same name already exists in the destination, it will append a timestamp to prevent overwriting.
 
 ---
 
